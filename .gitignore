@@ -1,0 +1,40 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+dist/
+build/
+*.egg-info/
+*.egg
+*.whl
+
+# --- 虚拟环境 ---
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- 操作系统 ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Claude AI ---
+.claude/
+.claude
+
+# --- 项目输出文件 ---
+detection_report.txt
+detection_report_charts.png
