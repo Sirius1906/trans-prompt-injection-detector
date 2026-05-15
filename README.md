@@ -179,3 +179,18 @@ python -m pytest tests/ -v
 ---
 
 > 本项目展示了从规则引擎 → 评估体系 → LLM 增强 → 工程化落地的完整检测系统构建思路。
+
+## 致谢 & 交流
+
+这是我大一下学期的课程项目，还有很多可以改进的地方。如果你愿意试试看、提提建议、或者发现了什么有趣的 edge case，我都会非常开心！
+
+- 觉得有用的话，欢迎点个 Star ⭐
+- 发现了 bug 或有改进想法，欢迎提 [Issue](https://github.com/Sirius1906/trans-prompt-injection-detector/issues)
+- 想一起折腾的话，直接发 PR 就好
+- 有任何问题也可以通过 Issue 找我聊
+
+特别感谢每个愿意花时间看这个项目的人，你们的反馈是我进步的最大动力。代码写得不好的地方还请多多包涵，我会继续学习和改进的 🙏
+
+---
+
+*Made with curiosity and a lot of caffeine ☕*
