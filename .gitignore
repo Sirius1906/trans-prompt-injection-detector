@@ -38,3 +38,14 @@ Desktop.ini
 # --- 项目输出文件 ---
 detection_report.txt
 detection_report_charts.png
+evaluation_report.json
+evaluation_report.md
+evaluation_charts.png
+llm_cache.json
+rule_optimization_report.md
+
+# --- 测试缓存 ---
+.pytest_cache/
+
+# --- 环境变量 ---
+.env

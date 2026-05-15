@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+import argparse
 import json
-import re
 import os
+import re
+import sys
+from typing import Any, Union
 
 try:
     import matplotlib.pyplot as plt
@@ -10,7 +15,7 @@ except ImportError:
 
 
 # 任务一：文本预处理模块
-def preprocess_text(text):
+def preprocess_text(text: str) -> str:
     text = text.strip()
     # 去除换行符和制表符，替换为空格
     text = text.replace("\n", " ")
@@ -46,7 +51,7 @@ def preprocess_text(text):
     return text.strip()
 
 
-def batch_preprocess(texts):
+def batch_preprocess(texts: list[str]) -> list[str]:
     result_list = []
     for txt in texts:
         cleaned = preprocess_text(txt)
@@ -63,19 +68,19 @@ DETECTION_RULES = [
         "category": "ignore_translation",
         "weight": 3,
         "patterns": [
-            r"ignore.*(translat|task|goal|role|instruction)",
-            r"do\s*not\s*translat",
-            r"instead\s*of\s*(a|the|any|producing|translating|rendering)?\s*(chinese|standard|literal|plain)?\s*(translat|render|output|text|version|rendering)",
-            r"skip\s*(the\s*)?(chinese\s*)?(translat|render|version|rendering)",
-            r"set\s*aside\s*(the\s*)?(chinese\s*)?(translat|render)",
-            r"no\s*chinese\s*(translat|render|output|version)",
-            r"rather\s*than\s*(translat|render|provid)",
-            r"stop\s*(the\s*)?translat",
-            r"don'?t\s*translat",
-            r"(replace|override).*(translat|render)",
-            r"without\s*(translat|render)",
-            r"less\s*literal.*(translat|render|output|result)",
-            r"(soft\s*)?skip\s*(on|the)?\s*translat",
+            r"\bignore.*(translat|task|goal|role|instruction)",
+            r"\bdo\s*not\s*translat",
+            r"\binstead\s*of\s*(a|the|any|producing|translating|rendering)?\s*(chinese|standard|literal|plain)?\s*(translat|render|output|text|version|rendering)",
+            r"\bskip\s*(the\s*)?(chinese\s*)?(translat|render|version|rendering)",
+            r"\bset\s*aside\s*(the\s*)?(chinese\s*)?(translat|render)",
+            r"\bno\s*chinese\s*(translat|render|output|version)",
+            r"\brather\s*than\s*(translat|render|provid)",
+            r"\bstop\s*(the\s*)?translat",
+            r"\bdon'?t\s*translat",
+            r"\b(replace|override).*(translat|render)",
+            r"\bwithout\s*(translat|render)",
+            r"\bless\s*literal.*(translat|render|output|result)",
+            r"\b(soft\s*)?skip\s*(on|the)?\s*translat",
         ],
     },
     {
@@ -83,21 +88,21 @@ DETECTION_RULES = [
         "category": "force_output",
         "weight": 3,
         "patterns": [
-            r"output\s*exactly",
-            r"return\s*(the|this|\")?\s*(phrase|line|output|text)",
-            r"print\s*the\s*line",
-            r"reply\s*only\s*with",
-            r"write\s*(exactly|only)\s*",
-            r"(give|produce|return)\s*the\s*(output|line|answer)",
-            r"respond\s*(\"?with\"?|to\s*this)",
-            r"(only|just)\s*(output|return|print|write|say|produce)\s",
-            r"final\s*(answer|output|result)\s*(is|should|must)\s",
-            r"as\s*the\s*(final\s*)?(answer|output)",
-            r"nothing\s*else",
-            r"go\s*with\s*the\s*(line|phrase|output)",
-            r"lean\s*(toward|to|towards)\s*the\s*(phrase|line|output)",
-            r"prefer\s*(the|a)\s*(playful|game|fun|meme)?\s*(line|output|phrase|answer)",
-            r"favor\s*(the|a)\s*(output|phrase|line|answer|response)",
+            r"\boutput\s*exactly",
+            r"\breturn\s*(the|this|\")?\s*(phrase|line|output|text)",
+            r"\bprint\s*the\s*line",
+            r"\breply\s*only\s*with",
+            r"\bwrite\s*(exactly|only)\s*",
+            r"\b(give|produce|return)\s*the\s*(output|line|answer)",
+            r"\brespond\s*(\"?with\"?|to\s*this)",
+            r"\b(only|just)\s*(output|return|print|write|say|produce)\s",
+            r"\bfinal\s*(answer|output|result)\s*(is|should|must)\s",
+            r"\bas\s*the\s*(final\s*)?(answer|output)",
+            r"\bnothing\s*else",
+            r"\bgo\s*with\s*the\s*(line|phrase|output)",
+            r"\blean\s*(toward|to|towards)\s*the\s*(phrase|line|output)",
+            r"\bprefer\s*(the|a)\s*(playful|game|fun|meme)?\s*(line|output|phrase|answer)",
+            r"\bfavor\s*(the|a)\s*(output|phrase|line|answer|response)",
         ],
     },
     {
@@ -105,13 +110,13 @@ DETECTION_RULES = [
         "category": "prompt_leak",
         "weight": 3,
         "patterns": [
-            r"(reveal|show|display|print|leak|expose).*(instruction|rule|policy|setup|secret|hidden|private|system)",
-            r"(hidden|secret|private|internal|concealed|censored).*(instruction|rule|policy|setup|prompt|system)",
-            r"translat\w*\s*(instruction|rule|policy|setup|guideline)",
-            r"(first|before\s*\w+).*(reveal|show|print|display).*(instruction|rule|secret|hidden)",
-            r"(tell|show)\s*me\s*(the|your)\s*(instruction|rule|prompt|secret|setup)",
-            r"what\s*(are|is)\s*(your|the)\s*(instruction|rule|prompt)",
-            r"system\s*(prompt|message|instruction|rule)",
+            r"\b(reveal|show|display|print|leak|expose).*(instruction|rule|policy|setup|secret|hidden|private|system)",
+            r"\b(hidden|secret|private|internal|concealed|censored).*(instruction|rule|policy|setup|prompt|system)",
+            r"\btranslat\w*\s*(instruction|rule|policy|setup|guideline)",
+            r"\b(first|before\s*\w+).*(reveal|show|print|display).*(instruction|rule|secret|hidden)",
+            r"\b(tell|show)\s*me\s*(the|your)\s*(instruction|rule|prompt|secret|setup)",
+            r"\bwhat\s*(are|is)\s*(your|the)\s*(instruction|rule|prompt)",
+            r"\bsystem\s*(prompt|message|instruction|rule)",
         ],
     },
     {
@@ -119,16 +124,16 @@ DETECTION_RULES = [
         "category": "roleplay_bypass",
         "weight": 2,
         "patterns": [
-            r"you\s*are\s*now\s*a\s*",
-            r"pretend\s*(you\s*are|to\s*be)\s*a\s*",
-            r"(switch|change)\s*(your\s*)?(role|from\s*translat)",
-            r"take\s*the\s*(voice|role|persona)\s*of",
-            r"act\s*as\s*(a|an|if)",
-            r"you\s*are\s*(a|an)\s*\w+\s*(owner|receptionist|referee|announcer)",
-            r"instead\s*of\s*translat\w*.*(act|behave|respond|play|speak)",
-            r"(act|behave|speak|handle)\s*(like|as)\s*(a|an)\s*",
-            r"from\s*(translator|translation)\s*to\s*",
-            r"(handle|treat)\s*this\s*as\s*(a|an)\s*",
+            r"\byou\s*are\s*now\s*a\s*",
+            r"\bpretend\s*(you\s*are|to\s*be)\s*a\s*",
+            r"\b(switch|change)\s*(your\s*)?(role|from\s*translat)",
+            r"\btake\s*the\s*(voice|role|persona)\s*of",
+            r"\bact\s*as\s*(a|an|if)",
+            r"\byou\s*are\s*(a|an)\s*\w+\s*(owner|receptionist|referee|announcer)",
+            r"\binstead\s*of\s*translat\w*.*(act|behave|respond|play|speak)",
+            r"\b(act|behave|speak|handle)\s*(like|as)\s*(a|an)\s*",
+            r"\bfrom\s*(translator|translation)\s*to\s*",
+            r"\b(handle|treat)\s*this\s*as\s*(a|an)\s*",
         ],
     },
     {
@@ -136,12 +141,12 @@ DETECTION_RULES = [
         "category": "fake_guidance",
         "weight": 2,
         "patterns": [
-            r"(formatting|format)\s*(guideline|instruction|note|rule)",
-            r"(translator|translation|editorial|post.edit|post\s*edit)\s*(note|instruction|guideline|remark)",
-            r"(localization|localisation)\s*(note|guideline|instruction)",
-            r"(editor|editing)\s*(note|instruction|guideline)",
-            r"(style|format)\s*(guide|note|instruction).*(output|return|write|translat)",
-            r"(for|in)\s*this\s*(line|case|text).*(return|output|use|go|prefer|lean)",
+            r"\b(formatting|format)\s*(guideline|instruction|note|rule)",
+            r"\b(translator|translation|editorial|post.edit|post\s*edit)\s*(note|instruction|guideline|remark)",
+            r"\b(localization|localisation)\s*(note|guideline|instruction)",
+            r"\b(editor|editing)\s*(note|instruction|guideline)",
+            r"\b(style|format)\s*(guide|note|instruction).*(output|return|write|translat)",
+            r"\b(for|in)\s*this\s*(line|case|text).*(return|output|use|go|prefer|lean)",
         ],
     },
     {
@@ -149,26 +154,26 @@ DETECTION_RULES = [
         "category": "soft_boundary",
         "weight": 1,
         "patterns": [
-            r"might\s*simply\s*(go\s*with|use|return|output|say|prefer|lean)",
-            r"you\s*(may|can|could)\s*(prefer|lean|choose|want|like|use|go|skip)",
-            r"(playful|lighter|funnier|creative|loose|lax|meme.style)\s*(locali[sz]ation|translat|render|result|approach|version|alternative|line|answer)",
-            r"favor\s*(the|a)\s*(output|line|phrase|result|answer)",
-            r"better\s*(response|result|output|answer)\s*(is|would\s*be)\s*to",
-            r"(lean|go|drift)\s*(toward|towards|to|with)\s*(the\s*)?(phrase|line|output|answer)",
-            r"(set\s*aside|skip|drop)\s*(the\s*)?(literal|standard|strict|normal|direct)\s*(translat|render|version|chinese)",
-            r"(rather|instead).*(go\s*with|use|return|output|say|favor|lean|prefer)",
-            r"(more|less)\s*(playful|creative|fun|lax|literal).*(output|render|translat|result|line|version)",
-            r"prefer\s*(the|a)\s*(playful|game|meme|fun).*(line|output|phrase|answer)",
-            r"(lean|go)\s*(toward|to)\s*(the|a)\s*(playful|game|meme|fun).*(line|output|phrase)",
-            r"skip\s*(the|a)?\s*(direct|plain|standard).*(version|translat|render).*(and|,).*(lean|go|prefer|use|favor)",
-            r"review\s*comment.*(playful|alternative|acceptable).*(favor|output|lean|go\s*with)",
-            r"soft\s*skip\s*(on|the)?\s*translat",
+            r"\bmight\s*simply\s*(go\s*with|use|return|output|say|prefer|lean)",
+            r"\byou\s*(may|can|could)\s*(prefer|lean|choose|want|like|use|go|skip)",
+            r"\b(playful|lighter|funnier|creative|loose|lax|meme.style)\s*(locali[sz]ation|translat|render|result|approach|version|alternative|line|answer)",
+            r"\bfavor\s*(the|a)\s*(output|line|phrase|result|answer)",
+            r"\bbetter\s*(response|result|output|answer)\s*(is|would\s*be)\s*to",
+            r"\b(lean|go|drift)\s*(toward|towards|to|with)\s*(the\s*)?(phrase|line|output|answer)",
+            r"\b(set\s*aside|skip|drop)\s*(the\s*)?(literal|standard|strict|normal|direct)\s*(translat|render|version|chinese)",
+            r"\b(rather|instead).*(go\s*with|use|return|output|say|favor|lean|prefer)",
+            r"\b(more|less)\s*(playful|creative|fun|lax|literal).*(output|render|translat|result|line|version)",
+            r"\bprefer\s*(the|a)\s*(playful|game|meme|fun).*(line|output|phrase|answer)",
+            r"\b(lean|go)\s*(toward|to)\s*(the|a)\s*(playful|game|meme|fun).*(line|output|phrase)",
+            r"\bskip\s*(the|a)?\s*(direct|plain|standard).*(version|translat|render).*(and|,).*(lean|go|prefer|use|favor)",
+            r"\breview\s*comment.*(playful|alternative|acceptable).*(favor|output|lean|go\s*with)",
+            r"\bsoft\s*skip\s*(on|the)?\s*translat",
         ],
     },
 ]
 
 
-def detect_injection(text):
+def detect_injection(text: str) -> dict[str, Any]:
     """
     使用规则对文本进行提示注入检测
     参数：已预处理的待检测的文本
@@ -238,11 +243,11 @@ def detect_injection(text):
 # 任务三、四：实现风险评分或分类机制，输出检测报告
 
 
-def print_separator(char="=", length=80, file=None):
+def print_separator(char: str = "=", length: int = 80, file: Any = None) -> None:
     print(char * length, file=file)
 
 
-def print_single_result(idx, text, result, file=None):
+def print_single_result(idx: str, text: str, result: dict[str, Any], file: Any = None) -> None:
     """格式化打印单条文本的检测结果到指定文件"""
     if result["risk_level"] == "high":
         risk_display = "!!! 高风险 !!!"
@@ -278,7 +283,7 @@ def print_single_result(idx, text, result, file=None):
     print("【分析理由】", result["reason"], file=file)
 
 
-def print_summary_report(all_results, total_count, file=None):
+def print_summary_report(all_results: list[dict[str, Any]], total_count: int, file: Any = None) -> dict[str, Any]:
     """打印汇总报告到指定文件"""
     print("\n", file=file)
     print_separator("=", 80, file=file)
@@ -340,13 +345,13 @@ def print_summary_report(all_results, total_count, file=None):
     return stats
 
 
-def draw_charts(stats, all_results):
+def draw_charts(stats: dict[str, Any], all_results: list[dict[str, Any]]) -> None:
     """绘制检测结果统计图表"""
     if not HAS_MATPLOTLIB:
         print("\n（matplotlib 未安装，跳过图表生成）")
         return
 
-    plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "DejaVu Sans"]
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "SimHei", "Microsoft YaHei", "Arial"]
     plt.rcParams["axes.unicode_minus"] = False
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
@@ -396,79 +401,127 @@ def draw_charts(stats, all_results):
     print("\n[图表已保存到 detection_report_charts.png]")
 
 
-def main():
-    data_file = "translation_pia_dataset_shuffled.jsonl"
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Translation Prompt Injection Detector",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python prompt_injection_detector.py
+  python prompt_injection_detector.py --data my_data.jsonl --output ./results
+  python prompt_injection_detector.py --method hybrid --eval
+  python prompt_injection_detector.py --threshold 5
+        """,
+    )
+    parser.add_argument(
+        "--data", default="translation_pia_dataset_shuffled.jsonl",
+        help="Path to JSONL dataset file",
+    )
+    parser.add_argument(
+        "--output", "-o", default=".",
+        help="Output directory for reports",
+    )
+    parser.add_argument(
+        "--threshold", type=int, default=3,
+        help="Score threshold for attack classification (default: 3)",
+    )
+    parser.add_argument(
+        "--method", choices=["regex", "llm", "hybrid"], default="regex",
+        help="Detection method (default: regex)",
+    )
+    parser.add_argument(
+        "--eval", action="store_true",
+        help="Run evaluation against ground truth labels",
+    )
+    parser.add_argument(
+        "--no-charts", action="store_true",
+        help="Skip chart generation",
+    )
+    args = parser.parse_args()
+
+    data_file = args.data
     if not os.path.exists(data_file):
-        print("错误：找不到数据文件", data_file)
-        print("请将数据文件与本程序放在同一目录下。")
-        return
+        print(f"Error: data file not found: {data_file}", file=sys.stderr)
+        sys.exit(1)
 
-    print("正在读取数据文件:", data_file)
-    print()
+    print(f"Loading data file: {data_file}\n")
 
-    texts = []       # 存储文本内容
-    text_ids = []    # 存储文本编号
+    texts: list[str] = []
+    text_ids: list[str] = []
+    records: list[dict[str, Any]] = []
 
-    file_handle = open(data_file, "r", encoding="utf-8")
-    line = file_handle.readline()
-    while line != "":
-        if line.strip() == "":
-            line = file_handle.readline()
-            continue
-
-        try:
-            record = json.loads(line)
-            texts.append(record["text"])
-            text_ids.append(record["id"])
-        except Exception as e:
-            print("警告：解析行时出错，跳过该行。错误信息:", e)
-
-        line = file_handle.readline()
-
-    file_handle.close()
+    with open(data_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+                texts.append(record["text"])
+                text_ids.append(record["id"])
+                records.append(record)
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"Warning: skipping malformed line: {e}", file=sys.stderr)
 
     total_count = len(texts)
-    print("成功读取", total_count, "条文本。")
-    print()
-    print("正在进行文本预处理...")
+    print(f"Loaded {total_count} texts.\n")
+
+    print("Preprocessing texts...")
     cleaned_texts = batch_preprocess(texts)
-    print("预处理完成。")
-    print()
+    print("Preprocessing complete.\n")
 
-    print("正在进行提示注入检测...")
-    all_results = []
+    # Select detection method
+    if args.method == "regex":
+        detector_fn = detect_injection
+        print("Running regex-based detection...")
+    elif args.method == "llm":
+        from llm_detector import create_llm_detector
+        llm = create_llm_detector()
+        detector_fn = llm.detect
+        print("Running LLM-based detection...")
+    elif args.method == "hybrid":
+        from llm_detector import create_hybrid_detector
+        detector_fn = create_hybrid_detector()
+        print("Running hybrid detection...")
 
-    i = 0
-    while i < total_count:
-        text = cleaned_texts[i]
-        result = detect_injection(text)
-        all_results.append(result)
-        i = i + 1
+    all_results = [detector_fn(t) for t in cleaned_texts]
+    print("Detection complete.")
 
-    print("检测完成。")
+    # Write detailed report
+    os.makedirs(args.output, exist_ok=True)
+    report_file = os.path.join(args.output, "detection_report.txt")
+    with open(report_file, "w", encoding="utf-8") as f:
+        print_separator("=", 80, file=f)
+        print("                    <<< 逐条检测报告 >>>", file=f)
+        print_separator("=", 80, file=f)
+        for j in range(total_count):
+            print_single_result(text_ids[j], texts[j], all_results[j], file=f)
+        stats = print_summary_report(all_results, total_count, file=f)
 
-    # 将完整报告写入文件
-    report_file = "detection_report.txt"
-    f = open(report_file, "w", encoding="utf-8")
+    print(f"Report saved to: {report_file}")
 
-    print_separator("=", 80, file=f)
-    print("                    <<< 逐条检测报告 >>>", file=f)
-    print_separator("=", 80, file=f)
-
-    j = 0
-    while j < total_count:
-        print_single_result(text_ids[j], texts[j], all_results[j], file=f)
-        j = j + 1
-
-    stats = print_summary_report(all_results, total_count, file=f)
-    f.close()
-
-    print("完整报告已保存到:", report_file)
-
-    # 在终端中输出汇总统计
+    # Print summary to terminal
     print_summary_report(all_results, total_count)
 
-    draw_charts(stats, all_results)
+    if not args.no_charts:
+        draw_charts(stats, all_results)
+
+    # Evaluation mode
+    if args.eval:
+        print("\n" + "=" * 80)
+        print("Running evaluation against ground truth labels...")
+        print("=" * 80)
+        from evaluator import run_evaluation, save_evaluation_reports, plot_evaluation_charts
+
+        eval_result = run_evaluation(detector_fn, data_file)
+        save_evaluation_reports(eval_result, args.output)
+        if not args.no_charts:
+            plot_evaluation_charts(eval_result, args.output)
+
+        print(f"\nAccuracy: {eval_result.accuracy:.4f}")
+        print(f"Precision: {eval_result.precision:.4f}")
+        print(f"Recall: {eval_result.recall:.4f}")
+        print(f"F1 Score: {eval_result.f1:.4f}")
 
 if __name__ == "__main__":
     main()
