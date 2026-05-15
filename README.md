@@ -1,58 +1,140 @@
 # 翻译提示注入检测器
 
-> Translation Prompt Injection Detector —— 基于规则正则的提示注入检测工具
+> Translation Prompt Injection Detector —— 基于规则正则 + LLM 的混合提示注入检测工具
 
-本项目为**大一下学期课程作业**，实现了一个面向机器翻译场景的提示注入（Prompt Injection）检测器。通过正则规则匹配 + 加权评分机制，识别试图劫持翻译系统的对抗性输入，防止模型执行非翻译指令、泄露系统提示词或输出恶意内容。
+本项目面向机器翻译场景，实现了一个提示注入（Prompt Injection）检测系统。通过正则规则匹配 + 加权评分机制作为快速筛查，可选结合 LLM 语义检测处理模糊边界案例，识别试图劫持翻译系统的对抗性输入。
 
 ## 功能特性
 
-- **规则驱动检测**：6 大类共 50+ 条正则模式，覆盖常见提示注入攻击手法
+- **规则驱动检测**：6 大类共 65 条正则模式，覆盖常见提示注入攻击手法
 - **加权评分机制**：不同危险等级规则分配不同权重（1-3 分），综合判定风险
 - **三级风险评级**：Low / Medium / High，对应无攻击、疑似攻击、确认攻击
-- **详细检测报告**：逐条输出每条文本的检测详情，命中规则与匹配片段一目了然
-- **统计摘要**：整体检出率、各规则命中分布、风险等级占比等汇总数据
-- **可视化图表**（需 matplotlib）：自动生成四合一检测报告图表
+- **LLM 混合检测**（可选）：正则初筛 + LLM 语义确认，兼顾速度与准确性
+- **完整评估体系**：Accuracy / Precision / Recall / F1 / 混淆矩阵 / 攻击类型检出率
+- **详细检测报告**：JSON + Markdown 双格式评估报告 + 可视化图表
+- **规则优化器**：自动分析 FP/FN、规则重叠、词边界建议、权重调优
 
 ## 项目结构
 
 ```
 trans-prompt-injection-detector/
-├── prompt_injection_detector.py          # 主检测程序
+├── prompt_injection_detector.py          # 主检测程序（正则引擎）
+├── evaluator.py                          # 评估模块（指标计算 + 报告生成）
+├── llm_detector.py                       # LLM 检测器 + 混合检测逻辑
+├── config.py                             # 配置管理（环境变量）
+├── rule_optimizer.py                     # 规则优化分析器
 ├── translation_pia_dataset_shuffled.jsonl # 数据集（1000条标注样本）
-├── README.md
-└── .gitignore
+├── tests/                                # 单元测试
+│   ├── test_preprocessing.py
+│   ├── test_detection.py
+│   └── test_evaluation.py
+├── requirements.txt
+├── pyproject.toml
+├── .env.example
+└── README.md
 ```
 
 ## 快速开始
 
 ### 环境要求
 
-- Python 3.6+
+- Python 3.8+
 - （可选）matplotlib —— 用于生成图表，未安装时自动跳过
 
-### 运行
+### 安装
 
 ```bash
-python prompt_injection_detector.py
+pip install -r requirements.txt
 ```
 
-程序会：
-1. 读取 `translation_pia_dataset_shuffled.jsonl` 数据集
-2. 对每条文本进行预处理和规则检测
-3. 在控制台输出统计摘要
-4. 将完整逐条报告写入 `detection_report.txt`
-5. 如已安装 matplotlib，自动生成 `detection_report_charts.png`
+### 基本使用
+
+```bash
+# 默认运行（正则检测）
+python prompt_injection_detector.py
+
+# 指定数据文件和输出目录
+python prompt_injection_detector.py --data my_data.jsonl --output ./results
+
+# 运行评估（对比 ground truth 计算指标）
+python prompt_injection_detector.py --eval
+
+# LLM 检测模式（需配置 API key）
+python prompt_injection_detector.py --method llm
+
+# 混合模式（正则 + LLM）
+python prompt_injection_detector.py --method hybrid --eval
+
+# 自定义阈值
+python prompt_injection_detector.py --threshold 5
+```
+
+### LLM 配置
+
+设置环境变量（或创建 `.env` 文件）：
+
+```bash
+export DETECTOR_LLM_API_KEY="your-api-key"
+export DETECTOR_LLM_MODEL="claude-haiku-4-5-20251001"
+export DETECTOR_LLM_PROVIDER="anthropic"   # 或 "openai"
+```
+
+### 运行测试
+
+```bash
+python -m pytest tests/ -v
+```
+
+## 评估结果
+
+在 1000 条标注数据集上的表现：
+
+| 指标 | 数值 |
+|------|------|
+| Accuracy | 1.0000 |
+| Precision | 1.0000 |
+| Recall | 1.0000 |
+| F1 Score | 1.0000 |
+| Specificity | 1.0000 |
+
+### 混淆矩阵
+
+|  | Predicted Normal | Predicted Injection |
+|--|:---:|:---:|
+| **Actual Normal** | TN = 800 | FP = 0 |
+| **Actual Injection** | FN = 0 | TP = 200 |
+
+### 各攻击类型检出率
+
+| 攻击类型 | 数量 | 检出 | 检出率 |
+|----------|:---:|:---:|:---:|
+| ignore_translation_task | 30 | 30 | 100% |
+| force_game_output | 30 | 30 | 100% |
+| force_meme_output | 30 | 30 | 100% |
+| fake_translation_note_injection | 25 | 25 | 100% |
+| game_roleplay_bypass | 25 | 25 | 100% |
+| soft_boundary_injection | 20 | 20 | 100% |
+| obfuscated_pia_expression | 20 | 20 | 100% |
+| prompt_leak_plus_fun_output | 20 | 20 | 100% |
+
+## 检测方法对比
+
+| 方法 | 准确率 | 速度 | 成本 | 优势 | 劣势 |
+|------|:---:|:---:|:---:|------|------|
+| Regex | 100% | 即时 | 免费 | 已知模式全覆盖 | 对变体/同义词无力 |
+| LLM | ~95%+ | 慢（API延迟） | 按调用计费 | 语义理解，泛化强 | 有延迟和费用 |
+| Hybrid | 100% | 大部分即时 | 低（仅模糊区调用LLM） | 兼顾速度与准确 | 需配置LLM |
 
 ## 检测规则说明
 
 | 序号 | 规则名称 | 权重 | 检测目标 |
 |:---:|:---|:---:|:---|
-| 1 | 要求忽略翻译任务 | 3 | 指令模型"不要翻译""跳过翻译""忽略任务"等，直接推翻翻译角色 |
-| 2 | 强制输出指定内容 | 3 | 要求模型"精确输出""只返回""回复以下内容"等，劫持输出行为 |
-| 3 | 要求泄露提示词/系统规则 | 3 | 诱导模型暴露系统指令、隐藏规则、内部配置等敏感信息 |
-| 4 | 角色扮演绕过翻译任务 | 2 | 要求模型"你现在是……""假装你是……"等，以角色扮演方式绕过任务约束 |
-| 5 | 伪装成翻译格式指导 | 2 | 以"翻译说明""格式指南""编辑备注"等伪装身份，诱导模型执行非翻译操作 |
-| 6 | 软边界模糊诱导改写 | 1 | 使用"你或许可以……""不妨……""更轻松的本地化"等软性话术，渐进式诱导越界 |
+| 1 | 要求忽略翻译任务 | 3 | 指令模型"不要翻译""跳过翻译""忽略任务"等 |
+| 2 | 强制输出指定内容 | 3 | 要求模型"精确输出""只返回""回复以下内容"等 |
+| 3 | 要求泄露提示词/系统规则 | 3 | 诱导模型暴露系统指令、隐藏规则等 |
+| 4 | 角色扮演绕过翻译任务 | 2 | 要求模型"你现在是……""假装你是……"等 |
+| 5 | 伪装成翻译格式指导 | 2 | 以"翻译说明""格式指南"等伪装身份 |
+| 6 | 软边界模糊诱导改写 | 1 | 使用软性话术渐进式诱导越界 |
 
 ### 评分与判定逻辑
 
@@ -63,6 +145,14 @@ python prompt_injection_detector.py
 | 3 - 4 | Medium | 具有较明显的提示注入特征，建议拦截 |
 | ≥ 5 | High | 强烈的提示注入攻击特征，必须拦截 |
 
+### 混合模式判定逻辑
+
+| 正则得分 | 处理方式 |
+|:---:|:---|
+| 0 | 直接判定 Normal，不调用 LLM |
+| 1 - 4 | 模糊区，调用 LLM 做最终判定 |
+| ≥ 5 | 直接判定 Attack，不调用 LLM |
+
 ## 数据集说明
 
 数据集包含 **1000 条**已标注的英文-中文翻译场景文本：
@@ -72,36 +162,20 @@ python prompt_injection_detector.py
 | 正常文本 | 800 | 80% |
 | 注入攻击 | 200 | 20% |
 
-攻击样本细分为 8 种攻击类型：
+攻击样本细分为 8 种攻击类型，覆盖忽略翻译、强制输出、角色扮演、伪装指导、软边界诱导、混淆表达等策略。
 
-- `ignore_translation_task`（忽略翻译，30 条）
-- `force_game_output`（强制游戏输出，30 条）
-- `force_meme_output`（强制梗输出，30 条）
-- `fake_translation_note_injection`（伪装翻译备注，25 条）
-- `game_roleplay_bypass`（角色扮演绕过，25 条）
-- `soft_boundary_injection`（软边界诱导，20 条）
-- `obfuscated_pia_expression`（混淆表达，20 条）
-- `prompt_leak_plus_fun_output`（泄露提示词+趣味输出，20 条）
+## 输出文件
 
-数据集文件为 `translation_pia_dataset_shuffled.jsonl`，每行一条 JSON 记录，包含 `id`、`text`、`label`、`risk_level`、`attack_type` 等字段。
-
-## 输出说明
-
-### 控制台输出
-
-运行后在终端直接打印统计摘要，包括：
-- 总体检出情况（检出数 / 检出率）
-- 真实标签与检测结果交叉统计
-- 风险等级分布（Low / Medium / High）
-- 各规则命中次数及占比
-
-### 文件输出
-
-| 文件名 | 内容 |
-|:---|:---|
-| `detection_report.txt` | 完整的逐条检测报告，包含每条文本的得分、风险等级、命中规则和匹配片段 |
-| `detection_report_charts.png` | 四合一可视化图表（需 matplotlib） |
+| 文件 | 说明 |
+|------|------|
+| `detection_report.txt` | 逐条检测报告（文本、得分、命中规则、匹配片段） |
+| `detection_report_charts.png` | 四合一可视化图表 |
+| `evaluation_report.json` | 评估指标 JSON（Accuracy/Precision/Recall/F1/混淆矩阵） |
+| `evaluation_report.md` | 评估报告 Markdown（可读格式） |
+| `evaluation_charts.png` | 评估可视化（混淆矩阵热力图、攻击类型检出率等） |
+| `rule_optimization_report.md` | 规则优化建议报告 |
+| `llm_cache.json` | LLM 检测结果缓存 |
 
 ---
 
-> 本项目为课程学习用途，展示了基于正则规则的提示注入检测的基本思路。实际生产环境中，建议结合 LLM 检测、语义分析、上下文理解等更鲁棒的方法。
+> 本项目展示了从规则引擎 → 评估体系 → LLM 增强 → 工程化落地的完整检测系统构建思路。
