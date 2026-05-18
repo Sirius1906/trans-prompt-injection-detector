@@ -13,6 +13,7 @@
 - **完整评估体系**：Accuracy / Precision / Recall / F1 / 混淆矩阵 / 攻击类型检出率
 - **详细检测报告**：JSON + Markdown 双格式评估报告 + 可视化图表
 - **规则优化器**：自动分析 FP/FN、规则重叠、词边界建议、权重调优
+- **Web 可视化界面**：Flask 前端，浏览器内切换检测方法、粘贴文本、查看评分与证据链
 
 ## 项目结构
 
@@ -23,6 +24,9 @@ trans-prompt-injection-detector/
 ├── llm_detector.py                       # LLM 检测器 + 混合检测逻辑
 ├── config.py                             # 配置管理（环境变量）
 ├── rule_optimizer.py                     # 规则优化分析器
+├── app.py                                 # Flask Web 界面
+├── templates/                             # 前端页面模板
+│   └── index.html
 ├── translation_pia_dataset_shuffled.jsonl # 数据集（1000条标注样本）
 ├── tests/                                # 单元测试
 │   ├── test_preprocessing.py
@@ -68,6 +72,17 @@ python prompt_injection_detector.py --method hybrid --provider ollama --eval
 # 自定义阈值
 python prompt_injection_detector.py --threshold 5
 ```
+
+### Web 界面
+
+```bash
+python app.py
+# 浏览器打开 http://127.0.0.1:5000
+```
+
+三种检测方法可选，Regex 模式无需任何配置，打开就能用。LLM 和 Hybrid 模式需要在界面的设置面板里填入 API Key 和选择 Provider，密钥存浏览器本地不会上传。粘贴文本点击检测，结果会展示风险等级、评分、命中规则和匹配到的证据片段。
+
+> 想给非技术同学演示的话，直接让他们打开网页用 Regex 模式就行，什么都不用配。
 
 ### LLM 配置
 
