@@ -222,7 +222,7 @@ def plot_evaluation_charts(result: EvaluationResult, output_dir: str) -> None:
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "SimHei", "Microsoft YaHei", "Arial"]
     plt.rcParams["axes.unicode_minus"] = False
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
     # 1. Confusion matrix heatmap
     ax1 = axes[0][0]
@@ -233,13 +233,13 @@ def plot_evaluation_charts(result: EvaluationResult, output_dir: str) -> None:
     ax1.set_xticklabels(["Predicted Normal", "Predicted Injection"])
     ax1.set_yticks([0, 1])
     ax1.set_yticklabels(["Actual Normal", "Actual Injection"])
-    ax1.set_title("Confusion Matrix", fontsize=14, fontweight="bold")
+    ax1.set_title("Confusion Matrix", fontsize=14, fontweight="bold", pad=10)
     for i in range(2):
         for j in range(2):
             ax1.text(j, i, str(cm_data[i][j]), ha="center", va="center",
                      fontsize=18, fontweight="bold",
                      color="white" if cm_data[i][j] > (cm_data[0][0] / 2) else "black")
-    plt.colorbar(im, ax=ax1, shrink=0.8)
+    plt.colorbar(im, ax=ax1, shrink=0.75)
 
     # 2. Per attack type detection rate
     ax2 = axes[0][1]
@@ -247,8 +247,8 @@ def plot_evaluation_charts(result: EvaluationResult, output_dir: str) -> None:
     types = [k for k in sorted(pa.keys()) if k != "none"]
     rates = [pa[t]["rate"] * 100 for t in types]
     colors = ["#4CAF50" if r >= 80 else "#FF9800" if r >= 50 else "#F44336" for r in rates]
-    bars = ax2.barh(types, rates, color=colors, edgecolor="black")
-    ax2.set_title("Detection Rate by Attack Type", fontsize=14, fontweight="bold")
+    bars = ax2.barh(types, rates, color=colors, edgecolor="black", height=0.6)
+    ax2.set_title("Detection Rate by Attack Type", fontsize=14, fontweight="bold", pad=10)
     ax2.set_xlabel("Detection Rate (%)")
     ax2.set_xlim(0, 105)
     for bar, r in zip(bars, rates):
@@ -258,10 +258,11 @@ def plot_evaluation_charts(result: EvaluationResult, output_dir: str) -> None:
     # 3. Score distribution (normal vs injection)
     ax3 = axes[1][0]
     sd = result.score_distribution
-    bins = range(0, max(max(sd["normal"], default=0), max(sd["injection"], default=0)) + 3, 1)
-    ax3.hist(sd["normal"], bins=bins, alpha=0.7, label="Normal", color="#4CAF50", edgecolor="black")
-    ax3.hist(sd["injection"], bins=bins, alpha=0.7, label="Injection", color="#F44336", edgecolor="black")
-    ax3.set_title("Score Distribution (Normal vs Injection)", fontsize=14, fontweight="bold")
+    score_max = max(max(sd["normal"], default=0), max(sd["injection"], default=0))
+    bins = range(0, score_max + 2, 1)
+    ax3.hist(sd["normal"], bins=bins, alpha=0.7, label="Normal", color="#4CAF50", edgecolor="black", rwidth=0.85)
+    ax3.hist(sd["injection"], bins=bins, alpha=0.7, label="Injection", color="#F44336", edgecolor="black", rwidth=0.85)
+    ax3.set_title("Score Distribution (Normal vs Injection)", fontsize=14, fontweight="bold", pad=10)
     ax3.set_xlabel("Score")
     ax3.set_ylabel("Count")
     ax3.legend()
@@ -270,15 +271,17 @@ def plot_evaluation_charts(result: EvaluationResult, output_dir: str) -> None:
     ax4 = axes[1][1]
     metric_names = ["Accuracy", "Precision", "Recall", "F1", "Specificity"]
     metric_vals = [result.accuracy, result.precision, result.recall, result.f1, result.specificity]
-    bars = ax4.bar(metric_names, metric_vals, color=["#2196F3", "#9C27B0", "#FF5722", "#009688", "#607D8B"], edgecolor="black")
-    ax4.set_title("Performance Metrics", fontsize=14, fontweight="bold")
-    ax4.set_ylim(0, 1.05)
+    bars = ax4.bar(metric_names, metric_vals,
+                   color=["#2196F3", "#9C27B0", "#FF5722", "#009688", "#607D8B"],
+                   edgecolor="black", width=0.5)
+    ax4.set_title("Performance Metrics", fontsize=14, fontweight="bold", pad=10)
+    ax4.set_ylim(0, 1.1)
     ax4.set_ylabel("Score")
     for bar, v in zip(bars, metric_vals):
-        ax4.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+        ax4.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.015,
                  f"{v:.4f}", ha="center", fontsize=11, fontweight="bold")
 
-    plt.tight_layout()
+    plt.subplots_adjust(hspace=0.4, wspace=0.35)
     chart_path = os.path.join(output_dir, "evaluation_charts.png")
     plt.savefig(chart_path, dpi=150, bbox_inches="tight")
     plt.close()

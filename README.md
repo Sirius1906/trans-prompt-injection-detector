@@ -59,11 +59,11 @@ python prompt_injection_detector.py --data my_data.jsonl --output ./results
 # 运行评估（对比 ground truth 计算指标）
 python prompt_injection_detector.py --eval
 
-# LLM 检测模式（需配置 API key）
-python prompt_injection_detector.py --method llm
+# LLM 检测模式（需配置 API key，可选 --provider 指定后端）
+python prompt_injection_detector.py --method llm --provider deepseek
 
 # 混合模式（正则 + LLM）
-python prompt_injection_detector.py --method hybrid --eval
+python prompt_injection_detector.py --method hybrid --provider ollama --eval
 
 # 自定义阈值
 python prompt_injection_detector.py --threshold 5
@@ -71,13 +71,48 @@ python prompt_injection_detector.py --threshold 5
 
 ### LLM 配置
 
-设置环境变量（或创建 `.env` 文件）：
+**方式一：`.env` 文件（推荐）**
+
+```bash
+cp .env.example .env
+# 编辑 .env，填入 API Key 和 provider
+```
+
+`.env` 示例：
+```bash
+DETECTOR_LLM_API_KEY="sk-your-key"
+DETECTOR_LLM_PROVIDER="deepseek"        # 见下方支持列表
+# DETECTOR_LLM_MODEL 和 DETECTOR_LLM_ENDPOINT 会自动填充，无需手动设置
+```
+
+**方式二：环境变量**
 
 ```bash
 export DETECTOR_LLM_API_KEY="your-api-key"
-export DETECTOR_LLM_MODEL="claude-haiku-4-5-20251001"
-export DETECTOR_LLM_PROVIDER="anthropic"   # 或 "openai"
+export DETECTOR_LLM_PROVIDER="deepseek"
 ```
+
+**方式三：CLI 参数**
+
+```bash
+python prompt_injection_detector.py --method llm --provider ollama --model llama3.2
+```
+
+**支持的 Provider**
+
+| Provider | 默认 Endpoint | 默认 Model | 需要 API Key |
+|----------|--------------|-----------|:---:|
+| `anthropic` | api.anthropic.com/v1/messages | claude-haiku-4-5-20251001 | 是 |
+| `openai` | api.openai.com/v1 | gpt-4o-mini | 是 |
+| `deepseek` | api.deepseek.com/v1 | deepseek-chat | 是 |
+| `zhipu` | open.bigmodel.cn/api/paas/v4 | glm-4-flash | 是 |
+| `qwen` | dashscope.aliyuncs.com/compatible-mode/v1 | qwen-turbo | 是 |
+| `groq` | api.groq.com/openai/v1 | llama-3.3-70b-versatile | 是 |
+| `moonshot` | api.moonshot.cn/v1 | moonshot-v1-8k | 是 |
+| `ollama` | localhost:11434/v1 | llama3.2 | 否（本地部署） |
+| `openai-compatible` | 手动指定 | 手动指定 | 视情况 |
+
+> 所有 Provider（除 `anthropic` 外）均走 OpenAI Chat Completions 兼容协议，`--endpoint` 和 `--model` 可覆盖默认值。
 
 ### 运行测试
 

@@ -1,17 +1,50 @@
-"""配置模块：集中管理所有配置项，支持环境变量覆盖。"""
+"""配置模块：集中管理所有配置项，支持环境变量覆盖和 .env 文件。"""
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).parent / ".env"
+    if _env_file.exists():
+        load_dotenv(_env_file)
+except ImportError:
+    pass
+
+
+PROVIDER_ENDPOINTS: dict[str, str] = {
+    "anthropic":          "https://api.anthropic.com/v1/messages",
+    "openai":             "https://api.openai.com/v1",
+    "openai-compatible":  "",
+    "deepseek":           "https://api.deepseek.com/v1",
+    "zhipu":              "https://open.bigmodel.cn/api/paas/v4",
+    "qwen":               "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "ollama":             "http://localhost:11434/v1",
+    "groq":               "https://api.groq.com/openai/v1",
+    "moonshot":           "https://api.moonshot.cn/v1",
+}
+
+DEFAULT_MODELS: dict[str, str] = {
+    "anthropic": "claude-haiku-4-5-20251001",
+    "openai":    "gpt-4o-mini",
+    "deepseek":  "deepseek-chat",
+    "zhipu":     "glm-4-flash",
+    "qwen":      "qwen-turbo",
+    "ollama":    "llama3.2",
+    "groq":      "llama-3.3-70b-versatile",
+    "moonshot":  "moonshot-v1-8k",
+}
 
 
 @dataclass
 class DetectorConfig:
     # LLM settings
     llm_api_key: str = ""
-    llm_model: str = "claude-haiku-4-5-20251001"
-    llm_endpoint: str = "https://api.anthropic.com/v1/messages"
-    llm_provider: str = "anthropic"  # "anthropic" | "openai" | "openai-compatible"
+    llm_model: str = ""
+    llm_endpoint: str = ""
+    llm_provider: str = "anthropic"
     llm_temperature: float = 0.0
     llm_max_tokens: int = 50
 
@@ -60,5 +93,13 @@ def load_config() -> DetectorConfig:
                 setattr(config, attr, float(val))
             else:
                 setattr(config, attr, val)
+
+    # Auto-fill endpoint/model from provider preset (if not explicitly set)
+    provider = config.llm_provider
+    if provider in PROVIDER_ENDPOINTS:
+        if not config.llm_endpoint:
+            config.llm_endpoint = PROVIDER_ENDPOINTS[provider]
+        if not config.llm_model:
+            config.llm_model = DEFAULT_MODELS.get(provider, "")
 
     return config

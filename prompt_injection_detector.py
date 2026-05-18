@@ -7,6 +7,8 @@ import re
 import sys
 from typing import Any, Union
 
+from config import DetectorConfig, PROVIDER_ENDPOINTS, load_config
+
 try:
     import matplotlib.pyplot as plt
     HAS_MATPLOTLIB = True
@@ -354,18 +356,20 @@ def draw_charts(stats: dict[str, Any], all_results: list[dict[str, Any]]) -> Non
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "SimHei", "Microsoft YaHei", "Arial"]
     plt.rcParams["axes.unicode_minus"] = False
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
     # 图1：风险等级分布柱状图
     ax1 = axes[0][0]
     levels = ["Low Risk", "Medium Risk", "High Risk"]
     counts = [stats["low"], stats["medium"], stats["high"]]
     colors = ["#4CAF50", "#FF9800", "#F44336"]
-    bars = ax1.bar(levels, counts, color=colors, edgecolor="black")
-    ax1.set_title("Risk Level Distribution", fontsize=14, fontweight="bold")
+    bars = ax1.bar(levels, counts, color=colors, edgecolor="black", width=0.5)
+    ax1.set_title("Risk Level Distribution", fontsize=14, fontweight="bold", pad=10)
     ax1.set_ylabel("Count")
+    max_count = max(counts) if counts else 1
+    ax1.set_ylim(0, max_count * 1.15)
     for bar, c in zip(bars, counts):
-        ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,
+        ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + max_count * 0.02,
                  str(c), ha="center", fontsize=12, fontweight="bold")
 
     # 图2：正常 vs 攻击饼图
@@ -373,30 +377,39 @@ def draw_charts(stats: dict[str, Any], all_results: list[dict[str, Any]]) -> Non
     labels = ["Normal", "Attack"]
     values = [stats["normal"], stats["attack"]]
     pie_colors = ["#4CAF50", "#F44336"]
-    ax2.pie(values, labels=labels, colors=pie_colors, autopct="%1.1f%%",
-            startangle=90, textprops={"fontsize": 12})
-    ax2.set_title("Normal vs Attack", fontsize=14, fontweight="bold")
+    wedges, texts, autotexts = ax2.pie(
+        values, labels=labels, colors=pie_colors, autopct="%1.1f%%",
+        startangle=90, textprops={"fontsize": 12},
+        pctdistance=0.6, labeldistance=1.1,
+    )
+    for at in autotexts:
+        at.set_fontweight("bold")
+    ax2.set_title("Normal vs Attack", fontsize=14, fontweight="bold", pad=10)
 
     # 图3：各规则命中次数水平柱状图
     ax3 = axes[1][0]
     rule_labels = ["R1", "R2", "R3", "R4", "R5", "R6"]
     rule_hits = [stats["rule_hit_count"].get(r["name"], 0) for r in DETECTION_RULES]
-    ax3.barh(rule_labels, rule_hits, color="#2196F3", edgecolor="black")
-    ax3.set_title("Rule Hit Count", fontsize=14, fontweight="bold")
+    ax3.barh(rule_labels, rule_hits, color="#2196F3", edgecolor="black", height=0.5)
+    ax3.set_title("Rule Hit Count", fontsize=14, fontweight="bold", pad=10)
     ax3.set_xlabel("Hits")
+    max_hits = max(rule_hits) if rule_hits and max(rule_hits) > 0 else 1
+    ax3.set_xlim(0, max_hits * 1.2)
     for i, h in enumerate(rule_hits):
-        ax3.text(h + 0.3, i, str(h), va="center", fontsize=11)
+        ax3.text(h + max_hits * 0.02, i, str(h), va="center", fontsize=11)
 
     # 图4：风险得分分布直方图
     ax4 = axes[1][1]
     scores = [r["score"] for r in all_results]
-    ax4.hist(scores, bins=range(0, max(scores) + 3, 1), color="#673AB7",
-             edgecolor="black", alpha=0.8)
-    ax4.set_title("Risk Score Distribution", fontsize=14, fontweight="bold")
+    score_max = max(scores) if scores else 0
+    ax4.hist(scores, bins=range(0, score_max + 2, 1), color="#673AB7",
+             edgecolor="black", alpha=0.8, rwidth=0.85)
+    ax4.set_title("Risk Score Distribution", fontsize=14, fontweight="bold", pad=10)
     ax4.set_xlabel("Score")
     ax4.set_ylabel("Count")
+    ax4.set_xticks(range(0, score_max + 1))
 
-    plt.tight_layout()
+    plt.subplots_adjust(hspace=0.35, wspace=0.3)
     plt.savefig("detection_report_charts.png", dpi=150, bbox_inches="tight")
     print("\n[图表已保存到 detection_report_charts.png]")
 
@@ -432,6 +445,15 @@ Examples:
     parser.add_argument(
         "--eval", action="store_true",
         help="Run evaluation against ground truth labels",
+    )
+    parser.add_argument(
+        "--provider", default=None,
+        choices=list(PROVIDER_ENDPOINTS.keys()),
+        help="LLM provider (default: anthropic)",
+    )
+    parser.add_argument(
+        "--model", default=None,
+        help="LLM model name (auto-selected per provider if not set)",
     )
     parser.add_argument(
         "--no-charts", action="store_true",
@@ -470,19 +492,28 @@ Examples:
     cleaned_texts = batch_preprocess(texts)
     print("Preprocessing complete.\n")
 
+    # Build config with CLI overrides for LLM/hybrid modes
+    config = load_config()
+    if args.provider:
+        config.llm_provider = args.provider
+    if args.model:
+        config.llm_model = args.model
+
     # Select detection method
     if args.method == "regex":
         detector_fn = detect_injection
         print("Running regex-based detection...")
     elif args.method == "llm":
         from llm_detector import create_llm_detector
-        llm = create_llm_detector()
+        llm = create_llm_detector(config)
         detector_fn = llm.detect
-        print("Running LLM-based detection...")
+        provider = config.llm_provider
+        print(f"Running LLM-based detection ({provider}/{config.llm_model})...")
     elif args.method == "hybrid":
         from llm_detector import create_hybrid_detector
-        detector_fn = create_hybrid_detector()
-        print("Running hybrid detection...")
+        detector_fn = create_hybrid_detector(config)
+        provider = config.llm_provider
+        print(f"Running hybrid detection ({provider}/{config.llm_model})...")
 
     all_results = [detector_fn(t) for t in cleaned_texts]
     print("Detection complete.")
