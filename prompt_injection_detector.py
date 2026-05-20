@@ -16,9 +16,65 @@ except ImportError:
     HAS_MATPLOTLIB = False
 
 
+# Unicode 同形字规范化映射表 (Cyrillic/Greek → Latin)
+_HOMOGLYPH_MAP = str.maketrans({
+    # Cyrillic lookalikes
+    'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x',
+    'А': 'A', 'В': 'B', 'Е': 'E', 'Н': 'H', 'К': 'K', 'М': 'M',
+    'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'Х': 'X', 'У': 'Y',
+    'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x',
+    'і': 'i', 'І': 'I', 'ӏ': 'i', 'Ꭰ': 'D', 'Ꮯ': 'C',
+    'ѕ': 's', 'Ѕ': 'S', 'л': 'l', 'Л': 'L',
+    'ӏ': 'i',  # Cyrillic palochka
+    # Greek lookalikes
+    'ο': 'o', 'Ο': 'O', 'τ': 't', 'Τ': 'T', 'ν': 'v', 'Ν': 'N',
+    'Α': 'A', 'Β': 'B', 'Ε': 'E', 'Ζ': 'Z', 'Η': 'H', 'Ι': 'I',
+    'Κ': 'K', 'Μ': 'M', 'Ν': 'N', 'Ο': 'O', 'Ρ': 'P', 'Τ': 'T',
+    'Χ': 'X', 'Υ': 'Y',
+    # Fullwidth lowercase letters (fallback if fullwidth conversion not enough)
+    'ａ': 'a', 'ｂ': 'b', 'ｃ': 'c', 'ｄ': 'd', 'ｅ': 'e',
+    'ｆ': 'f', 'ｇ': 'g', 'ｈ': 'h', 'ｉ': 'i', 'ｊ': 'j',
+    'ｋ': 'k', 'ｌ': 'l', 'ｍ': 'm', 'ｎ': 'n', 'ｏ': 'o',
+    'ｐ': 'p', 'ｑ': 'q', 'ｒ': 'r', 'ｓ': 's', 'ｔ': 't',
+    'ｕ': 'u', 'ｖ': 'v', 'ｗ': 'w', 'ｘ': 'x', 'ｙ': 'y', 'ｚ': 'z',
+    # Fullwidth uppercase letters
+    'Ａ': 'A', 'Ｂ': 'B', 'Ｃ': 'C', 'Ｄ': 'D', 'Ｅ': 'E',
+    'Ｆ': 'F', 'Ｇ': 'G', 'Ｈ': 'H', 'Ｉ': 'I', 'Ｊ': 'J',
+    'Ｋ': 'K', 'Ｌ': 'L', 'Ｍ': 'M', 'Ｎ': 'N', 'Ｏ': 'O',
+    'Ｐ': 'P', 'Ｑ': 'Q', 'Ｒ': 'R', 'Ｓ': 'S', 'Ｔ': 'T',
+    'Ｕ': 'U', 'Ｖ': 'V', 'Ｗ': 'W', 'Ｘ': 'X', 'Ｙ': 'Y', 'Ｚ': 'Z',
+    # Fullwidth digits
+    '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
+    '５': '5', '６': '6', '７': '7', '８': '8', '９': '9',
+})
+
+# 零宽字符集合 (用于移除)
+_ZERO_WIDTH_CHARS = {
+    '​',  # Zero Width Space
+    '‌',  # Zero Width Non-Joiner
+    '‍',  # Zero Width Joiner
+    '‎',  # Left-to-Right Mark
+    '‏',  # Right-to-Left Mark
+    '⁠',  # Word Joiner
+    '⁡',  # Function Application
+    '⁢',  # Invisible Times
+    '⁣',  # Invisible Separator
+    '⁤',  # Invisible Plus
+    '﻿',  # Byte Order Mark / Zero Width No-Break Space
+    '­',  # Soft Hyphen
+}
+
+
 # 任务一：文本预处理模块
 def preprocess_text(text: str) -> str:
     text = text.strip()
+
+    # 移除零宽字符和不可见字符
+    text = "".join(ch for ch in text if ch not in _ZERO_WIDTH_CHARS)
+
+    # Unicode 同形字规范化 (Cyrillic/Greek/Fullwidth → Latin ASCII)
+    text = text.translate(_HOMOGLYPH_MAP)
+
     # 去除换行符和制表符，替换为空格
     text = text.replace("\n", " ")
     text = text.replace("\t", " ")
@@ -47,6 +103,8 @@ def preprocess_text(text: str) -> str:
     text = text.replace("’", "'")
     text = text.replace("（", "(")
     text = text.replace("）", ")")
+    text = text.replace("【", "[")
+    text = text.replace("】", "]")
 
     # 统一英文大小写（转为小写）
     text = text.lower()
@@ -83,6 +141,8 @@ DETECTION_RULES = [
             r"\bwithout\s*(translat|render)",
             r"\bless\s*literal.*(translat|render|output|result)",
             r"\b(soft\s*)?skip\s*(on|the)?\s*translat",
+            r"\breturn\s*without\s*(change|modification|translat|render)",
+            r"\bkeep\s*the\s*original.{0,20}(without|no).{0,10}(translat|change|render)",
         ],
     },
     {
@@ -105,6 +165,8 @@ DETECTION_RULES = [
             r"\blean\s*(toward|to|towards)\s*the\s*(phrase|line|output)",
             r"\bprefer\s*(the|a)\s*(playful|game|fun|meme)?\s*(line|output|phrase|answer)",
             r"\bfavor\s*(the|a)\s*(output|phrase|line|answer|response)",
+            r"\b(output|say|reply|return|echo)\s*:\s*\S",
+            r"\bpreferred\s*(output|response|result|answer)\s*(is|would|should)",
         ],
     },
     {
@@ -170,6 +232,107 @@ DETECTION_RULES = [
             r"\bskip\s*(the|a)?\s*(direct|plain|standard).*(version|translat|render).*(and|,).*(lean|go|prefer|use|favor)",
             r"\breview\s*comment.*(playful|alternative|acceptable).*(favor|output|lean|go\s*with)",
             r"\bsoft\s*skip\s*(on|the)?\s*translat",
+        ],
+    },
+    {
+        "name": "中文直接指令注入",
+        "category": "cn_direct_injection",
+        "weight": 3,
+        "patterns": [
+            r"(忽略|无视|跳过|别管|放弃|停止|暂停).*(翻译|转译|译文|语言转换|翻译任务)",
+            r"(不要|别|不许|不准|少).*(翻译|转译|译文)",
+            r"(翻译|转译)(任务|指令|模式).*(取消|关闭|停止|结束|切换)",
+            r"(直接|立刻|马上|立即|径直|干脆).*(输出|返回|显示|打印|给出|回复|呈现)",
+            r"(只|仅|就|光)\s*(须|需|要|能|可|会|该|应该|管|用)\s*(输出|回复|返回|显示|打印|说|呈现)",
+            r"(只|仅|就|光)\s*(输出|回复|返回|显示|打印|说|呈现)",
+            r"(直接|立刻|马上|干脆)\s*(输出|回复|返回|显示|打印|说|呈现)",
+            r"(输出|返回|显示|打印|回复)(以下|下面|这个|这段|这句)",
+            r"(原样|原封不动|照原样|直接).*(输出|返回|显示|保留)",
+            r"(忘掉|忘记|放弃|搁置).*(翻译|任务|指令|原来的|之前)",
+            r"(不要|别).*(翻译|转译).*(直接|就|只).*(输出|返回|说)",
+            r"(系统|管理员).*(通知|指令|命令).*(取消|暂停|切换|改为).*(翻译|输出)",
+            r"(最高|最优先|第一).*优先.*(忽略|跳过|无视).*(翻译|指令|任务)",
+            r"(停止|暂停|终止|结束).*(翻译|转译|语言转换)",
+            r"(不再|不是|不再是|不再是).*(翻译|translator|翻译器|翻译任务)",
+            r"(不必|不需|不用|无须).*(translat|翻译|translate).{0,15}(直接|就|只).*(output|输出|回复|返回)",
+        ],
+    },
+    {
+        "name": "语码转换注入检测",
+        "category": "cn_codeswitch_bypass",
+        "weight": 3,
+        "patterns": [
+            r"(别|不用|不要|不必|少).{0,5}(translat|translate|翻译)",
+            r"(跳过|忽略|无视).{0,5}(translat|translate|translation)",
+            r"(直接|就|只|立刻).{0,5}(output|reply|return|print|echo|show)",
+            r"(skip|ignore|drop|stop).{0,10}(translat|翻译|chinese).{0,10}(了|吧|的|就|直接).{0,10}(output|返回|回复|输出)",
+            r"(直接|就).{0,5}(output|reply|print|return|echo).{0,10}(出来|就好|就行了|就是了)",
+            r"(不要|别).{0,5}(do|做).{0,5}(translat|翻译|chinese)",
+            r"(please|just|now).{0,5}(不要|别|直接|就|只).{0,10}(translat|translate|output|回复|输出)",
+            r"(cancel|stop).{0,10}(翻译|转译|translat).{0,10}(now|现在|立即|直接).{0,10}(output|输出|回复)",
+            r"(switch|change|turn).{0,15}(into|to|成).{0,10}(direct|直接).{0,5}(output|输出|模式|mode)",
+            r"(no|not|without).{0,5}(translat|翻译|chinese).{0,15}(直接|就|只).{0,5}(output|输出|回复)",
+            r"(raw|direct).{0,5}(output|print|echo).{0,10}(以下|文本|内容|消息)",
+            r"(printer|echo).{0,10}(打印|输出).{0,10}(以下|文本|内容|消息)",
+        ],
+    },
+    {
+        "name": "中英混合角色扮演",
+        "category": "cn_mixed_roleplay",
+        "weight": 3,
+        "patterns": [
+            r"(你现在是|现在你是|你已经是|你已成为).{0,10}(一个|一名|一位|个)",
+            r"(假装|假扮|扮演|充当|作为).{0,10}(你是|自己是|一个|一名)",
+            r"(角色|身份).*(切换|转变|改变|变成|设定)",
+            r"(你|你已|已经).*(不是|不再是|不再是).*(翻译|translator|翻译器|翻译机器人)",
+            r"(作为|以).{0,10}(身份|角色).{0,20}(说|输出|回复|回答)",
+            r"(ignore|skip|stop|forget).*(translat|task|role).{0,30}(你是|现在是|扮演|作为|角色)",
+            r"(you|you.re|you\s*are).*(now|currently).{0,30}(游戏|角色|副本|任务|老板|主播|管理员)",
+            r"(instead|rather).*(translat|render).{0,30}(扮演|充当|角色|身份|说|输出)",
+            r"(pretend|act|behave).*(as|like).{0,20}(一个|一名|一位|个|游戏|角色)",
+            r"(场景|系统|模式).*(切换|变更|进入|设定).{0,20}(角色|游戏|扮演|模式)",
+            r"(解锁|触发|激活).*(隐藏|特殊|秘密).*(角色|身份|模式)",
+            r"(任务|职责|工作).*(不是|不再是|不再).*(翻译|translator)",
+            r"(用|以).{0,10}(身份|角色|口吻).*(说|回复|输出|回答|处理)",
+        ],
+    },
+    {
+        "name": "中文伪装翻译指导",
+        "category": "cn_fake_guidance",
+        "weight": 3,
+        "patterns": [
+            r"(\[|【).*(译者|翻译|本地化|审校|编辑).*(\]|】).{0,20}(建议|要求|说明|提示|备注)",
+            r"(译者|翻译|本地化|审校|编辑|术语).*(注|说明|备注|提示|建议|指南|规范|要求)",
+            r"(格式|样式).*(说明|规范|指南|要求|规则|备注).{0,20}(输出|返回|显示|保留|使用|翻译)",
+            r"(翻译|本地化|语言转换).*(规范|指南|要求|标准|规则).{0,20}(输出|返回|保留|原样)",
+            r"(审校|校对|质量).*(意见|说明|反馈|建议).{0,20}(输出|返回|保留|跳过|免)",
+            r"(编辑|产品|项目).*(指南|说明|更新|备忘录).{0,20}(输出|返回|保留|翻译|透传)",
+            r"(术语表|词汇表|词库).{0,20}(不可翻译|不翻译|保留|原样|直接)",
+            r"(免译|不翻译|不要翻译|无须翻译|豁免翻译).{0,20}(输出|返回|保留|原文|原样|直接)",
+            r"(翻译记忆|匹配结果|核准译文).{0,20}(使用|采用|输出|返回)",
+            r"(上级|管理|客户|产品经理).*(审批|要求|需求).{0,20}(输出|返回|保留|不翻译)",
+            r"(本条|此段|这段|该).*(不翻译|免译|豁免|跳过翻译).{0,20}(输出|返回|保留)",
+            r"(注|说明|备注|提示).{0,20}(建议|要求).{0,10}(不.*翻译|保留|原样|直接).*(输出|返回)",
+        ],
+    },
+    {
+        "name": "中文软性诱导绕过",
+        "category": "cn_soft_guidance",
+        "weight": 1,
+        "patterns": [
+            r"(不妨|不如|干脆|要不).{0,10}(试试|试一下|尝试).{0,20}(输出|返回|说|回复|直接)",
+            r"(或许|也许|可能|大概|应该).{0,10}(更好|更合适|更恰当|更准确|更适合)",
+            r"(建议|提议|推荐|主张).{0,10}(输出|返回|显示|说|回复).{0,20}(而非|不是|而不是).*(翻译|转译)",
+            r"(换个|换一种|换一个).{0,5}(说法|方式|方法|思路|角度|风格).{0,20}(输出|返回|处理|回复)",
+            r"(与其|比起).{0,10}(翻译|转译|逐字|辛苦).{0,15}(不如|还不如|倒不如|直接).{0,20}(输出|返回|说|用|换个)",
+            r"(轻松|随意|活泼|有趣|好玩).{0,5}(一点|一些|点|下).{0,20}(输出|返回|处理|回复|翻译|表述)",
+            r"(这次|这回|这条).{0,5}(不翻译|别翻译|不用翻译|免了|算了|跳过).{0,20}(试试|看看|来|输出|返回)",
+            r"(能不能|可不可以|能否|是否可以).{0,10}(不翻译|跳过翻译|免翻译|换个方式|直接)",
+            r"(我).{0,5}(不想|不需要|不用|懒得).{0,10}(翻译|译文).{0,15}(你|帮我).*(输出|说|显示|做)",
+            r"(翻译).{0,10}(用腻|玩腻|看腻|腻了|厌倦).{0,20}(换个|试试|输出)",
+            r"(认真|仔细).{0,5}(想想|考虑).{0,15}(翻译|逐字翻译|直译).{0,15}(不是|并非|不一定).*(最佳|最好|最合适)",
+            r"(如果|假如|假设).{0,5}(你|可以|愿意|方便).{0,10}(不翻译|跳过|尝试|试试).{0,20}(输出|回复|说)",
+            r"(不翻译|别翻译).{0,20}(直接).{0,10}(说说|输出|回复|来|处理|做)",
         ],
     },
 ]

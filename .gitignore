@@ -44,6 +44,10 @@ evaluation_charts.png
 llm_cache.json
 rule_optimization_report.md
 
+# --- 生成数据集（可由 generate_dataset.py 重新生成）---
+cn_mixed_dataset.jsonl
+full_dataset.jsonl
+
 # --- 测试缓存 ---
 .pytest_cache/
 

@@ -58,6 +58,42 @@ class TestPreprocessText:
         assert result == "hello,world! this is a test. goodbye!"
 
 
+class TestUnicodeNormalization:
+    def test_fullwidth_letters_to_halfwidth(self) -> None:
+        text = "Ｉｇｎｏｒｅ the translation"
+        result = preprocess_text(text)
+        assert "ignore" in result
+
+    def test_fullwidth_digits_to_halfwidth(self) -> None:
+        text = "１２３ items"
+        result = preprocess_text(text)
+        assert "123" in result
+
+    def test_cyrillic_homoglyph_normalization(self) -> None:
+        text = "ѕkip the transлation"  # Cyrillic s and l
+        result = preprocess_text(text)
+        assert "ѕ" not in result
+        assert "л" not in result
+
+    def test_zero_width_character_removal(self) -> None:
+        text = "ig​nore the trans​lation"
+        result = preprocess_text(text)
+        assert "​" not in result
+
+    def test_zero_width_non_joiner_removal(self) -> None:
+        text = "do‌not‌translate"
+        result = preprocess_text(text)
+        assert "‌" not in result
+
+    def test_chinese_brackets_to_english(self) -> None:
+        text = "【译者注】这条不用翻译"
+        result = preprocess_text(text)
+        assert "【" not in result
+        assert "】" not in result
+        assert "[" in result
+        assert "]" in result
+
+
 class TestBatchPreprocess:
     def test_batch_processing(self) -> None:
         texts = ["  Hello  ", "  World  "]
