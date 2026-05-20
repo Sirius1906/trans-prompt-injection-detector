@@ -22,10 +22,8 @@ _HOMOGLYPH_MAP = str.maketrans({
     'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x',
     'А': 'A', 'В': 'B', 'Е': 'E', 'Н': 'H', 'К': 'K', 'М': 'M',
     'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'Х': 'X', 'У': 'Y',
-    'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x',
     'і': 'i', 'І': 'I', 'ӏ': 'i', 'Ꭰ': 'D', 'Ꮯ': 'C',
     'ѕ': 's', 'Ѕ': 'S', 'л': 'l', 'Л': 'L',
-    'ӏ': 'i',  # Cyrillic palochka
     # Greek lookalikes
     'ο': 'o', 'Ο': 'O', 'τ': 't', 'Τ': 'T', 'ν': 'v', 'Ν': 'N',
     'Α': 'A', 'Β': 'B', 'Ε': 'E', 'Ζ': 'Z', 'Η': 'H', 'Ι': 'I',
@@ -84,11 +82,7 @@ def preprocess_text(text: str) -> str:
         text = text.replace("  ", " ")
 
     # 去除不可见的控制字符
-    result = ""
-    for ch in text:
-        if ord(ch) >= 32 or ch in ["\n", "\t"]:
-            result = result + ch
-    text = result
+    text = "".join(ch for ch in text if ord(ch) >= 32)
 
     # 将中文标点统一为英文标点
     text = text.replace("，", ",")
@@ -338,19 +332,11 @@ DETECTION_RULES = [
 ]
 
 
-def detect_injection(text: str) -> dict[str, Any]:
+def detect_injection(text: str, threshold: int = 3) -> dict[str, Any]:
     """
     使用规则对文本进行提示注入检测
-    参数：已预处理的待检测的文本
+    参数：已预处理的待检测的文本, threshold 攻击判定阈值
     返回：检测结果字典
-          {
-              "is_attack": True/False,
-              "risk_level": "low" / "medium" / "high",
-              "matched_rules": [规则名称列表],
-              "matched_patterns": [(规则名, 匹配到的具体文本片段)],
-              "score": 总分数,
-              "reason": "简要说明理由"
-          }
     """
     text_lower = text.lower()
     total_score = 0
@@ -380,11 +366,11 @@ def detect_injection(text: str) -> dict[str, Any]:
         risk_level = "low"
         is_attack = False
         reason = "未命中任何可疑规则，文本内容正常。"
-    elif total_score <= 2:
+    elif total_score < threshold:
         risk_level = "low"
         is_attack = False
         reason = "命中少量低权重规则（得分" + str(total_score) + "），存在轻微可疑特征，但不足以判定为攻击。"
-    elif total_score <= 4:
+    elif total_score < threshold + 2:
         risk_level = "medium"
         is_attack = True
         reason = "命中多条可疑规则（得分" + str(total_score) + "），具有较明显的提示注入特征，建议拦截。"
@@ -551,9 +537,10 @@ def draw_charts(stats: dict[str, Any], all_results: list[dict[str, Any]]) -> Non
 
     # 图3：各规则命中次数水平柱状图
     ax3 = axes[1][0]
-    rule_labels = ["R1", "R2", "R3", "R4", "R5", "R6"]
+    rule_names = [r["name"] for r in DETECTION_RULES]
     rule_hits = [stats["rule_hit_count"].get(r["name"], 0) for r in DETECTION_RULES]
-    ax3.barh(rule_labels, rule_hits, color="#2196F3", edgecolor="black", height=0.5)
+    truncated_names = [(n[:18] + "..") if len(n) > 20 else n for n in rule_names]
+    ax3.barh(truncated_names, rule_hits, color="#2196F3", edgecolor="black", height=0.5)
     ax3.set_title("Rule Hit Count", fontsize=14, fontweight="bold", pad=10)
     ax3.set_xlabel("Hits")
     max_hits = max(rule_hits) if rule_hits and max(rule_hits) > 0 else 1
@@ -574,6 +561,7 @@ def draw_charts(stats: dict[str, Any], all_results: list[dict[str, Any]]) -> Non
 
     plt.subplots_adjust(hspace=0.35, wspace=0.3)
     plt.savefig("detection_report_charts.png", dpi=150, bbox_inches="tight")
+    plt.close()
     print("\n[图表已保存到 detection_report_charts.png]")
 
 
@@ -664,8 +652,9 @@ Examples:
 
     # Select detection method
     if args.method == "regex":
-        detector_fn = detect_injection
-        print("Running regex-based detection...")
+        threshold = args.threshold
+        detector_fn = lambda t: detect_injection(t, threshold=threshold)
+        print(f"Running regex-based detection (threshold={threshold})...")
     elif args.method == "llm":
         from llm_detector import create_llm_detector
         llm = create_llm_detector(config)
@@ -677,6 +666,8 @@ Examples:
         detector_fn = create_hybrid_detector(config)
         provider = config.llm_provider
         print(f"Running hybrid detection ({provider}/{config.llm_model})...")
+    else:
+        raise ValueError(f"Unknown detection method: {args.method}")
 
     all_results = [detector_fn(t) for t in cleaned_texts]
     print("Detection complete.")

@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
+import threading
 import urllib.request
 from typing import Any, Callable
 
@@ -34,11 +36,14 @@ SYSTEM_PROMPT = (
     '"NORMAL" if the text is a legitimate translation request.'
 )
 
+MAX_CACHE_SIZE = 1000
+
 
 class LLMDetector:
     def __init__(self, config: DetectorConfig) -> None:
         self.config = config
         self.cache: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
         self._load_cache()
 
     def _load_cache(self) -> None:
@@ -50,9 +55,23 @@ class LLMDetector:
                 self.cache = {}
 
     def _save_cache(self) -> None:
-        if self.config.llm_cache_enabled:
-            with open(self.config.llm_cache_path, "w", encoding="utf-8") as f:
+        if not self.config.llm_cache_enabled:
+            return
+        # Evict oldest entries if over max
+        if len(self.cache) > MAX_CACHE_SIZE:
+            keys_to_keep = list(self.cache.keys())[-MAX_CACHE_SIZE:]
+            self.cache = {k: self.cache[k] for k in keys_to_keep}
+        # Atomic write: write to temp file, then replace
+        cache_dir = os.path.dirname(self.config.llm_cache_path) or "."
+        try:
+            fd, tmp_path = tempfile.mkstemp(
+                suffix=".json", prefix="llm_cache_", dir=cache_dir
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(self.cache, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, self.config.llm_cache_path)
+        except (IOError, OSError):
+            pass
 
     @staticmethod
     def _cache_key(text: str) -> str:
@@ -79,7 +98,10 @@ class LLMDetector:
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-            return body["content"][0]["text"].strip()
+            content = body.get("content", [])
+            if not content or not isinstance(content, list):
+                raise ValueError(f"Unexpected Anthropic response structure: {body}")
+            return content[0].get("text", "").strip()
 
     def _call_openai_compatible(self, user_text: str) -> str:
         data = json.dumps({
@@ -104,7 +126,11 @@ class LLMDetector:
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-            return body["choices"][0]["message"]["content"].strip()
+            choices = body.get("choices", [])
+            if not choices or not isinstance(choices, list):
+                raise ValueError(f"Unexpected API response structure: {body}")
+            message = choices[0].get("message", {})
+            return message.get("content", "").strip()
 
     def detect(self, text: str, preprocessed: bool = False) -> dict[str, Any]:
         if not preprocessed:
@@ -112,10 +138,12 @@ class LLMDetector:
 
         key = self._cache_key(text)
         if self.config.llm_cache_enabled and key in self.cache:
-            cached = self.cache[key]
+            with self._lock:
+                cached = dict(self.cache[key])
             cached["cached"] = True
             return cached
 
+        error_detail = None
         try:
             if self.config.llm_provider == "anthropic":
                 response = self._call_anthropic(text)
@@ -123,18 +151,23 @@ class LLMDetector:
                 response = self._call_openai_compatible(text)
         except Exception as e:
             print(f"LLM API error: {e}", file=sys.stderr)
-            return {
-                "is_attack": False,
-                "risk_level": "low",
+            error_detail = str(e)
+            response = None
+
+        if response is None:
+            result: dict[str, Any] = {
+                "is_attack": None,
+                "risk_level": "error",
                 "matched_rules": [],
                 "matched_details": [],
-                "score": 0,
-                "reason": f"LLM API call failed: {e}",
+                "score": -1,
+                "reason": f"LLM API call failed — detection unavailable. Error: {error_detail}",
                 "cached": False,
             }
+            return result
 
         is_attack = "INJECTION" in response.upper()
-        result: dict[str, Any] = {
+        result = {
             "is_attack": is_attack,
             "risk_level": "high" if is_attack else "low",
             "matched_rules": ["llm_classifier"] if is_attack else [],
@@ -145,7 +178,8 @@ class LLMDetector:
         }
 
         if self.config.llm_cache_enabled:
-            self.cache[key] = result
+            with self._lock:
+                self.cache[key] = result
             self._save_cache()
 
         return result
@@ -177,7 +211,7 @@ def hybrid_detect(
             "risk_level": llm_result["risk_level"],
             "matched_rules": merged_rules,
             "matched_details": merged_details,
-            "score": score + (10 if llm_result["is_attack"] else 0),
+            "score": max(score * 2, 5) if llm_result["is_attack"] else score,
             "reason": f"[Hybrid] Regex score={score} (ambiguous), {llm_result['reason']}",
         }
 

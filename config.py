@@ -98,7 +98,13 @@ def load_config() -> DetectorConfig:
     provider = config.llm_provider
     if provider in PROVIDER_ENDPOINTS:
         if not config.llm_endpoint:
-            config.llm_endpoint = PROVIDER_ENDPOINTS[provider]
+            endpoint = PROVIDER_ENDPOINTS[provider]
+            if not endpoint:
+                raise ValueError(
+                    f"Provider '{provider}' requires an explicit endpoint. "
+                    "Set DETECTOR_LLM_ENDPOINT or pass --endpoint."
+                )
+            config.llm_endpoint = endpoint
         if not config.llm_model:
             config.llm_model = DEFAULT_MODELS.get(provider, "")
 

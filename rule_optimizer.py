@@ -70,10 +70,10 @@ def suggest_word_boundaries() -> list[dict[str, Any]]:
 
 def analyze_rule_overlap() -> list[dict[str, Any]]:
     # Build a co-occurrence analysis: which rule categories fire together?
-    from evaluator import load_dataset as ld
-    records = ld("translation_pia_dataset_shuffled.jsonl")
     if not os.path.exists("translation_pia_dataset_shuffled.jsonl"):
         return []
+    from evaluator import load_dataset as ld
+    records = ld("translation_pia_dataset_shuffled.jsonl")
 
     co_occurrence: dict[tuple[str, str], int] = {}
     category_hits: dict[str, int] = {}

@@ -805,6 +805,16 @@
         </select>
       </div>
     </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="endpoint">Endpoint (可选)</label>
+        <input type="text" id="endpoint" placeholder="自定义 API 地址" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="model">Model (可选)</label>
+        <input type="text" id="model" placeholder="自定义模型名" autocomplete="off">
+      </div>
+    </div>
     <div class="hint">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
       密钥仅保存在浏览器本地
@@ -870,6 +880,8 @@
   const settingsPanel = document.getElementById("settingsPanel");
   const apiKeyInput = document.getElementById("apiKey");
   const providerSelect = document.getElementById("provider");
+  const endpointInput = document.getElementById("endpoint");
+  const modelInput = document.getElementById("model");
   const keyDot = document.getElementById("keyDot");
   const textInput = document.getElementById("textInput");
   const charCount = document.getElementById("charCount");
@@ -888,6 +900,8 @@
           keyDot.classList.add("saved");
         }
         if (saved.provider) providerSelect.value = saved.provider;
+        if (saved.endpoint) endpointInput.value = saved.endpoint;
+        if (saved.model) modelInput.value = saved.model;
         if (saved.method) currentMethod = saved.method;
       }
     } catch (e) { /* ignore */ }
@@ -900,6 +914,8 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         api_key: apiKeyInput.value,
         provider: providerSelect.value,
+        endpoint: endpointInput.value,
+        model: modelInput.value,
         method: currentMethod,
       }));
     } catch (e) { /* ignore */ }
@@ -941,6 +957,8 @@
 
   apiKeyInput.addEventListener("input", saveSettings);
   providerSelect.addEventListener("change", saveSettings);
+  endpointInput.addEventListener("input", saveSettings);
+  modelInput.addEventListener("input", saveSettings);
 
   // ── Character count ──
   textInput.addEventListener("input", function () {
@@ -991,6 +1009,8 @@
     if (currentMethod === "llm" || currentMethod === "hybrid") {
       body.api_key = apiKeyInput.value.trim();
       body.provider = providerSelect.value;
+      body.endpoint = endpointInput.value.trim() || undefined;
+      body.model = modelInput.value.trim() || undefined;
 
       if (!body.api_key) {
         settingsPanel.classList.add("visible");
@@ -1029,7 +1049,11 @@
 
     // Verdict
     var verdict = document.getElementById("verdict");
-    if (r.is_attack) {
+    if (r.risk_level === "error") {
+      verdict.className = "verdict safe";
+      verdict.innerHTML =
+        '<div class="spark"></div><span class="indicator"></span>检测服务异常';
+    } else if (r.is_attack) {
       verdict.className = "verdict attack";
       verdict.innerHTML =
         '<div class="spark"></div><span class="indicator"></span>检测到攻击';
@@ -1041,15 +1065,24 @@
 
     // Risk badge
     var badge = document.getElementById("riskBadge");
-    var levelText = r.risk_level === "low" ? "低风险" : r.risk_level === "medium" ? "中风险" : "高风险";
+    var levelText;
+    if (r.risk_level === "error") {
+      levelText = "异常";
+    } else if (r.risk_level === "low") {
+      levelText = "低风险";
+    } else if (r.risk_level === "medium") {
+      levelText = "中风险";
+    } else {
+      levelText = "高风险";
+    }
     badge.innerHTML = '<span class="badge-dot"></span>' + levelText;
-    badge.className = "risk-badge " + r.risk_level;
+    badge.className = "risk-badge " + (r.risk_level === "error" ? "low" : r.risk_level);
 
-    // Score
-    var maxScore = 10;
-    var score = Math.min(r.score, maxScore);
-    var pct = (score / maxScore) * 100;
-    document.getElementById("scoreNum").textContent = score + " 分";
+    // Score — use actual score, cap progress bar at 20 for visual scale
+    var actualScore = r.score;
+    var maxBar = 20;
+    var pct = Math.min((actualScore / maxBar) * 100, 100);
+    document.getElementById("scoreNum").textContent = actualScore + " 分";
     var bar = document.getElementById("scoreBar");
     bar.style.width = pct + "%";
     if (r.risk_level === "low") {
